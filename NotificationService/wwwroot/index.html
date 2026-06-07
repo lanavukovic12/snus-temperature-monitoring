@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Temperature Monitoring — Alarms</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --border: #2d3a4f;
+      --text: #e7ecf3;
+      --muted: #8b9cb3;
+      --p1: #f0c040;
+      --p2: #e87830;
+      --p3: #e04040;
+      --ok: #3dd68c;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .status {
+      margin-top: 0.35rem;
+      font-size: 0.875rem;
+      color: var(--muted);
+    }
+
+    .status.connected { color: var(--ok); }
+
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      padding: 1rem 1.5rem 2rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    @media (max-width: 800px) {
+      main { grid-template-columns: 1fr; }
+    }
+
+    section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    section h2 {
+      margin: 0;
+      padding: 0.75rem 1rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.15);
+    }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .filters label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .filters input, .filters select, .filters button {
+      font: inherit;
+      padding: 0.35rem 0.5rem;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .filters button {
+      align-self: flex-end;
+      cursor: pointer;
+      background: #2a4a7a;
+      border-color: #3d6aaf;
+    }
+
+    .filters button:hover { background: #355d96; }
+
+    .table-wrap {
+      max-height: 420px;
+      overflow: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    th, td {
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    .priority-1 { color: var(--p1); font-weight: 600; }
+    .priority-2 { color: var(--p2); font-weight: 600; }
+    .priority-3 { color: var(--p3); font-weight: 600; }
+
+    .empty {
+      padding: 1.5rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.875rem;
+    }
+
+    #live-alarms tbody tr { animation: fadeIn 0.3s ease; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; background: rgba(255, 255, 255, 0.05); }
+      to { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Temperature Monitoring Dashboard</h1>
+    <div id="connection-status" class="status">Connecting to SignalR…</div>
+  </header>
+
+  <main>
+    <section>
+      <h2>Live Alarms</h2>
+      <div class="table-wrap">
+        <table id="live-alarms">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Sensor</th>
+              <th>Value</th>
+              <th>Priority</th>
+            </tr>
+          </thead>
+          <tbody id="alarm-body">
+            <tr class="empty-row"><td colspan="4" class="empty">Waiting for alarms…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Historical Data</h2>
+      <div class="filters">
+        <label>
+          Sensor
+          <input type="text" id="filter-sensor" placeholder="sensor-01" />
+        </label>
+        <label>
+          From
+          <input type="datetime-local" id="filter-from" />
+        </label>
+        <label>
+          To
+          <input type="datetime-local" id="filter-to" />
+        </label>
+        <label>
+          Type
+          <select id="filter-type">
+            <option value="readings">Raw readings</option>
+            <option value="consensus">Consensus</option>
+          </select>
+        </label>
+        <button type="button" id="load-history">Load</button>
+      </div>
+      <div class="table-wrap">
+        <table id="history-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Sensor</th>
+              <th>Value</th>
+              <th>Alarm</th>
+              <th>Quality</th>
+            </tr>
+          </thead>
+          <tbody id="history-body">
+            <tr class="empty-row"><td colspan="5" class="empty">Use filters and click Load</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+  <script>
+    const alarmBody = document.getElementById("alarm-body");
+    const historyBody = document.getElementById("history-body");
+    const statusEl = document.getElementById("connection-status");
+    const maxLiveRows = 50;
+
+    function formatTime(iso) {
+      return new Date(iso).toLocaleString();
+    }
+
+    function priorityClass(priority) {
+      return priority >= 1 && priority <= 3 ? `priority-${priority}` : "";
+    }
+
+    function prependAlarm(alarm) {
+      const empty = alarmBody.querySelector(".empty-row");
+      if (empty) empty.remove();
+
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${formatTime(alarm.timestamp)}</td>
+        <td>${alarm.sensorId}</td>
+        <td>${alarm.value.toFixed(2)}°C</td>
+        <td class="${priorityClass(alarm.alarmPriority)}">P${alarm.alarmPriority}</td>
+      `;
+      alarmBody.prepend(row);
+
+      while (alarmBody.children.length > maxLiveRows) {
+        alarmBody.lastChild.remove();
+      }
+    }
+
+    function buildQueryParams() {
+      const params = new URLSearchParams();
+      const sensor = document.getElementById("filter-sensor").value.trim();
+      const from = document.getElementById("filter-from").value;
+      const to = document.getElementById("filter-to").value;
+
+      if (sensor) params.set("sensorId", sensor);
+      if (from) params.set("from", new Date(from).toISOString());
+      if (to) params.set("to", new Date(to).toISOString());
+
+      return params;
+    }
+
+    async function loadHistory() {
+      const type = document.getElementById("filter-type").value;
+      const params = buildQueryParams();
+      const url = `/api/reports/${type}?${params.toString()}`;
+
+      historyBody.innerHTML = `<tr><td colspan="5" class="empty">Loading…</td></tr>`;
+
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const rows = await response.json();
+
+        if (rows.length === 0) {
+          historyBody.innerHTML = `<tr><td colspan="5" class="empty">No results</td></tr>`;
+          return;
+        }
+
+        historyBody.innerHTML = rows.map(r => `
+          <tr>
+            <td>${formatTime(r.timestamp)}</td>
+            <td>${r.sensorId}</td>
+            <td>${r.value.toFixed(2)}°C</td>
+            <td class="${priorityClass(r.alarmPriority)}">${r.alarmPriority > 0 ? "P" + r.alarmPriority : "—"}</td>
+            <td>${r.quality}</td>
+          </tr>
+        `).join("");
+      } catch (err) {
+        historyBody.innerHTML = `<tr><td colspan="5" class="empty">Error: ${err.message}</td></tr>`;
+      }
+    }
+
+    document.getElementById("load-history").addEventListener("click", loadHistory);
+
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl("/hubs/alarms")
+      .withAutomaticReconnect()
+      .build();
+
+    connection.on("AlarmReceived", prependAlarm);
+
+    connection.onreconnecting(() => {
+      statusEl.textContent = "Reconnecting…";
+      statusEl.classList.remove("connected");
+    });
+
+    connection.onreconnected(() => {
+      statusEl.textContent = "Connected (live alarms)";
+      statusEl.classList.add("connected");
+    });
+
+    connection.onclose(() => {
+      statusEl.textContent = "Disconnected";
+      statusEl.classList.remove("connected");
+    });
+
+    connection.start()
+      .then(() => {
+        statusEl.textContent = "Connected (live alarms)";
+        statusEl.classList.add("connected");
+      })
+      .catch(err => {
+        statusEl.textContent = `Connection failed: ${err.message}`;
+      });
+  </script>
+</body>
+</html>

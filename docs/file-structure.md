@@ -4,7 +4,7 @@ SensorSystem/
 │
 ├── SensorSimulator/                          ← Console app, runs on Computer A, simulates physical sensors
 │   ├── Program.cs                            ← Entry point, spins up N sensor instances, each on its own thread
-│   ├── SensorConfig.cs                       ← Sensor ID, temp range, thresholds, alarm priorities
+│   ├── SensorConfig.cs                       ← Sensor ID, temp range, thresholds, quality status, malicious mode
 │   ├── MessageSigner.cs                      ← Signs outgoing messages with RSA/ECDSA private key
 │   └── EncryptionHelper.cs                   ← AES encrypts message payload before sending
 │
@@ -25,13 +25,14 @@ SensorSystem/
 ├── ConsensusService/                         ← ASP.NET Core Worker Service, runs silently in background
 │   ├── Worker.cs                             ← Wakes every 60s, orchestrates consensus calculation
 │   ├── BftConsensus/
-│   │   └── ConsensusCalculator.cs           ← BFT algorithm, filters BAD quality sensors, computes consensus value
+│   │   └── ConsensusCalculator.cs           ← BFT algorithm, excludes BAD/UNCERTAIN, flags malicious sensors
 │   ├── appsettings.json
 │   └── Dockerfile
 │
 ├── NotificationService/                      ← ASP.NET Core Web API, handles real-time alarm push notifications
 │   ├── Controllers/
-│   │   └── AlarmController.cs               ← POST /api/notify, receives alarm ping from IngestionService
+│   │   ├── AlarmController.cs               ← POST /api/notify, receives alarm ping from IngestionService
+│   │   └── ReportsController.cs             ← GET /api/reports/*, historical readings and consensus values
 │   ├── Hubs/
 │   │   └── AlarmHub.cs                      ← SignalR hub, pushes alarm to connected dashboard clients
 │   ├── appsettings.json
@@ -48,13 +49,16 @@ SensorSystem/
 │
 ├── infra/
 │   ├── nginx/
-│   │   └── nginx.conf                       ← Routes /api/ingest → IngestionService, /api/notify → NotificationService
+│   │   └── nginx.conf                       ← Routes /api/ingest, /api/notify, /api/reports to backend services
 │   └── k8s/
 │       ├── ingestion.yaml                   ← Kubernetes deployment + service for IngestionService
 │       ├── consensus.yaml                   ← Kubernetes deployment for ConsensusService
 │       ├── notification.yaml                ← Kubernetes deployment + service for NotificationService
 │       ├── postgres.yaml                    ← Kubernetes deployment + persistent volume for PostgreSQL
 │       └── ingress.yaml                     ← Kubernetes ingress rules, mirrors nginx.conf logic
+│
+├── docs/
+│   └── security.md                           ← Encryption, signing, rate limiting, real-IP risk analysis
 │
 ├── docker-compose.yml                        ← Spins up all services + PostgreSQL + Nginx with one command
 └── README.md                                 ← Startup instructions, security documentation, screenshots

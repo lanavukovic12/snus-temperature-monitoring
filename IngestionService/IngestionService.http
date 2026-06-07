@@ -1,0 +1,12 @@
+@IngestionService_HostAddress = http://localhost:5055
+
+POST {{IngestionService_HostAddress}}/api/ingest
+Content-Type: application/json
+
+{
+  "sensorId": "sensor-01",
+  "value": 42.5,
+  "timestamp": "2026-06-07T12:00:00Z",
+  "alarmPriority": 0,
+  "quality": "Good"
+}

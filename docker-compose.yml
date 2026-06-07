@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: tms-postgres
+    environment:
+      POSTGRES_DB: temperature_monitoring
+      POSTGRES_USER: tms_user
+      POSTGRES_PASSWORD: tms_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - tms_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tms_user -d temperature_monitoring"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  tms_pgdata:

@@ -1,4 +1,4 @@
-**Phase 1 — Foundation**
+**Phase 1 — Foundation** DONE
 - Create the solution, all project folders, add them to the .sln
 - Set up the `Shared/` class library with all EF Core models
 - Set up PostgreSQL container and run first migration to create the tables
@@ -7,7 +7,7 @@
 
 ---
 
-**Phase 2 — Sensor Simulator**
+**Phase 2 — Sensor Simulator** DONE
 - Console app that generates random temperature values on a timer
 - Configurable per sensor: ID, temp range, thresholds, alarm priorities
 - Sends plain HTTP POST to IngestionService (no encryption yet, add it later)
@@ -23,7 +23,7 @@
 
 ---
 
-**Phase 3 — IngestionService (basic)**
+**Phase 3 — IngestionService (basic)** DONE
 - POST /api/ingest endpoint that receives and validates readings
 - Writes raw readings to DB via EF Core
 - Returns 200 OK, nothing fancy yet
@@ -32,7 +32,7 @@
 
 ---
 
-**Phase 4 — Fault Tolerance**
+**Phase 4 — Fault Tolerance** DONE
 - Add `SensorWatchdog` background service
 - Tracks `LastSeenAt` per sensor in `SensorRegistry` table
 - Marks sensors STANDBY if silent for 10 seconds
@@ -44,7 +44,7 @@
 
 ---
 
-**Phase 5 — Alarm Detection**
+**Phase 5 — Alarm Detection** DONE
 - Add `AlarmDetector` service inside IngestionService
 - Checks incoming value against thresholds
 - Determines alarm priority (0, 1, 2, 3)
@@ -81,7 +81,7 @@
 - Add RSA/ECDSA signing in `MessageSigner.cs`
 - Add replay attack protection (messageId + timestamp check)
 - Add rate limiting middleware (block if >10 msg/sec per sensor)
-- Optionally use `AspNetCoreRateLimit` as recommended in the spec (custom middleware is also fine)
+- Use `AspNetCoreRateLimit` as recommended in the spec
 - Document security risks of using concrete network IPs instead of localhost, and list mitigations applied
 
 ---
