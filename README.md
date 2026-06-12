@@ -1,79 +1,93 @@
 # Temperature Monitoring System
 
-Course project: a distributed temperature monitoring system with simulated sensors, a central ingestion API, alarm notifications, and a live dashboard. Data is stored in PostgreSQL.
+Course project for supervisory control systems: a distributed temperature monitoring system with simulated sensors, ingestion API, alarm notifications, consensus calculation, and historical reports. Data is stored in PostgreSQL.
 
-## What runs where
+## Components
 
 | Component | Project | URL | Role |
 |-----------|---------|-----|------|
-| Database | Docker (`docker compose`) | `localhost:5432` | PostgreSQL |
-| Ingestion API | `IngestionService` | http://localhost:5055 | Receives sensor readings, fault tolerance, alarms |
-| Notifications | `NotificationService` | http://localhost:5117 | Alarm dashboard (SignalR) + historical reports |
-| Sensors | `SensorSimulator` | — | Simulates 8 temperature sensors (console app) |
-
-The simulator sends HTTP POST requests to IngestionService. When a reading crosses a threshold, IngestionService logs an alarm and forwards it to NotificationService, which pushes it to the browser dashboard in real time.
+| Database | Docker | `localhost:5433` | PostgreSQL |
+| Ingestion API | `IngestionService` | http://localhost:5055 | Receives secure sensor readings, fault tolerance, alarms |
+| Notifications | `NotificationService` | http://localhost:5117 | SignalR alarm dashboard and historical reports |
+| Consensus | `ConsensusService` | worker | Calculates minute consensus values |
+| Ingress | nginx | http://localhost:8080 | Routes `/api/ingest`, `/api/reports`, `/hubs/alarms` |
+| Sensors | `SensorSimulator` | console app | Simulates 8 temperature sensors |
 
 ## Prerequisites
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- EF Core CLI (for migrations):
+- .NET 8 SDK
+- Docker Desktop
+- EF Core CLI:
 
 ```bash
 dotnet tool install --global dotnet-ef
 ```
 
-## First-time setup
-
-From the repo root:
+## First-time local setup
 
 ```bash
-docker compose up -d
+docker compose up -d postgres
 dotnet ef database update --project Shared --startup-project IngestionService
 ```
 
-Database credentials are preconfigured in each service’s `appsettings.json` — no manual DB setup needed.
+Database credentials are preconfigured in each service's `appsettings.json`. IngestionService also applies EF migrations automatically on startup for Docker runs.
 
-## Run
+## Run locally with dotnet
 
-Open **three separate terminals** from the repo root:
+Open four terminals from the repository root:
 
 ```bash
-# Terminal 1 — ingestion API
 dotnet run --project IngestionService
-
-# Terminal 2 — notifications + dashboard
 dotnet run --project NotificationService
-
-# Terminal 3 — sensor simulator (all 8 sensors)
+dotnet run --project ConsensusService
 dotnet run --project SensorSimulator
 ```
 
-Then open **http://localhost:5117** in a browser for the live alarm dashboard.
+Open http://localhost:5117 for the dashboard.
 
-**What you should see:** the simulator prints temperature readings (yellow/orange/red when alarms fire). IngestionService logs ingest and alarm lines. The dashboard shows live alarms and can load historical readings via the panel on the right.
+Secure ingestion is enabled by default. Sensors post encrypted and RSA-signed envelopes to `/api/ingest/secure`; plain `/api/ingest` is rejected unless `SecureMessaging:Enabled=false`.
 
-### Optional: split sensors across processes
+## Run server side with Docker compose
 
-Useful for simulating multiple machines on one PC:
+```bash
+docker compose up --build
+```
+
+Open:
+
+- http://localhost:8080 for the dashboard through ingress
+- http://localhost:5055/swagger for IngestionService
+- http://localhost:5117 for NotificationService directly
+
+Run sensors locally against ingress:
 
 ```powershell
-$env:SENSOR_CONFIG = "machine-a"   # sensor-01 … sensor-04
-dotnet run --project SensorSimulator
-
-$env:SENSOR_CONFIG = "machine-b"   # sensor-05 … sensor-08
+$env:INGESTION_BASE_URL = "http://localhost:8080"
 dotnet run --project SensorSimulator
 ```
 
-On another computer, point the simulator at the machine running IngestionService:
+## Split sensors across two computers
+
+On the server computer, run the services. On another computer, point the simulator to the server LAN IP:
 
 ```powershell
-$env:INGESTION_BASE_URL = "http://<server-ip>:5055"
+$env:INGESTION_BASE_URL = "http://<server-lan-ip>:5055"
 $env:SENSOR_CONFIG = "machine-a"
 dotnet run --project SensorSimulator
 ```
 
+Use `machine-b` for the other group of sensors.
+
+## Useful demo endpoints
+
+- `GET /api/registry` - current sensor statuses and quality flags
+- `POST /api/registry/{sensorId}/block` - block a sensor for 30 seconds
+- `GET /api/reports/readings` - raw historical readings
+- `GET /api/reports/consensus` - stored consensus values
+
 ## More documentation
 
-- `docs/project_specification.md` — full requirements
-- `docs/implementation-plan.md` — build phases and progress
+- `docs/project_specification.md` - full requirements
+- `docs/implementation-plan.md` - build phases and progress
+- `docs/security.md` - encryption, signing, replay protection, rate limiting
+- `docs/bft-consensus.md` - simplified BFT consensus algorithm and demo steps

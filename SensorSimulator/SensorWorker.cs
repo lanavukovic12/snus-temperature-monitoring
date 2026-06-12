@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Shared.Dtos;
 using Shared.Enums;
+using Shared.Security;
 
 namespace SensorSimulator;
 
@@ -20,15 +21,23 @@ public class SensorWorker
     private readonly HttpClient _httpClient;
     private readonly string _ingestUrl;
     private readonly string _statusUrl;
+    private readonly SecureMessagingOptions _secureMessagingOptions;
     private readonly Random _random = new();
     private SensorStatus? _lastKnownStatus;
+    private long _messageId;
 
-    public SensorWorker(SensorConfig config, HttpClient httpClient, string ingestUrl, string statusUrl)
+    public SensorWorker(
+        SensorConfig config,
+        HttpClient httpClient,
+        string ingestUrl,
+        string statusUrl,
+        SecureMessagingOptions secureMessagingOptions)
     {
         _config = config;
         _httpClient = httpClient;
         _ingestUrl = ingestUrl;
         _statusUrl = statusUrl;
+        _secureMessagingOptions = secureMessagingOptions;
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -156,11 +165,17 @@ public class SensorWorker
 
     private async Task PostReadingAsync(IngestReadingRequest request, CancellationToken cancellationToken)
     {
-        using var response = await _httpClient.PostAsJsonAsync(
-            _ingestUrl,
-            request,
-            JsonOptions,
-            cancellationToken);
+        using var response = _secureMessagingOptions.Enabled
+            ? await _httpClient.PostAsJsonAsync(
+                _ingestUrl,
+                SecureMessageCrypto.Protect(request, Interlocked.Increment(ref _messageId), _secureMessagingOptions),
+                JsonOptions,
+                cancellationToken)
+            : await _httpClient.PostAsJsonAsync(
+                _ingestUrl,
+                request,
+                JsonOptions,
+                cancellationToken);
 
         if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
         {

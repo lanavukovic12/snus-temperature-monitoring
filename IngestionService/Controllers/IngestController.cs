@@ -3,6 +3,8 @@ using Shared.Data;
 using Shared.Dtos;
 using Shared.Models;
 using IngestionService.Services;
+using Microsoft.Extensions.Options;
+using Shared.Security;
 
 namespace IngestionService.Controllers;
 
@@ -13,22 +15,57 @@ public class IngestController : ControllerBase
     private readonly AppDbContext _dbContext;
     private readonly SensorRegistryService _registryService;
     private readonly AlarmDetector _alarmDetector;
+    private readonly SecureIngestGuard _secureIngestGuard;
+    private readonly SecureMessagingOptions _secureMessagingOptions;
     private readonly ILogger<IngestController> _logger;
 
     public IngestController(
         AppDbContext dbContext,
         SensorRegistryService registryService,
         AlarmDetector alarmDetector,
+        SecureIngestGuard secureIngestGuard,
+        IOptions<SecureMessagingOptions> secureMessagingOptions,
         ILogger<IngestController> logger)
     {
         _dbContext = dbContext;
         _registryService = registryService;
         _alarmDetector = alarmDetector;
+        _secureIngestGuard = secureIngestGuard;
+        _secureMessagingOptions = secureMessagingOptions.Value;
         _logger = logger;
+    }
+
+    [HttpPost("secure")]
+    public async Task<IActionResult> IngestSecure([FromBody] SecureIngestRequest? request, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            return BadRequest("Request body is required.");
+        }
+
+        if (!_secureMessagingOptions.Enabled)
+        {
+            return BadRequest("Secure ingestion is disabled on this server.");
+        }
+
+        var result = await _secureIngestGuard.ValidateAsync(request, cancellationToken);
+        return result.IsAccepted && result.Payload is not null
+            ? await IngestPayloadAsync(result.Payload, cancellationToken)
+            : BadRequest(result.Error);
     }
 
     [HttpPost]
     public async Task<IActionResult> Ingest([FromBody] IngestReadingRequest? request, CancellationToken cancellationToken)
+    {
+        if (_secureMessagingOptions.Enabled)
+        {
+            return BadRequest("Plain ingestion is disabled. Use /api/ingest/secure.");
+        }
+
+        return await IngestPayloadAsync(request, cancellationToken);
+    }
+
+    private async Task<IActionResult> IngestPayloadAsync(IngestReadingRequest? request, CancellationToken cancellationToken)
     {
         if (request is null)
         {

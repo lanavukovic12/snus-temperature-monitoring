@@ -7,14 +7,67 @@ services:
       POSTGRES_USER: tms_user
       POSTGRES_PASSWORD: tms_password
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - tms_pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tms_user -d temperature_monitoring"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+
+  ingestion-service:
+    build:
+      context: .
+      dockerfile: IngestionService/Dockerfile
+    container_name: tms-ingestion
+    environment:
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=temperature_monitoring;Username=tms_user;Password=tms_password
+      NotificationService__BaseUrl: http://notification-service:8080
+    ports:
+      - "5055:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: NotificationService/Dockerfile
+    container_name: tms-notification
+    environment:
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=temperature_monitoring;Username=tms_user;Password=tms_password
+    ports:
+      - "5117:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ingestion-service:
+        condition: service_started
+
+  consensus-service:
+    build:
+      context: .
+      dockerfile: ConsensusService/Dockerfile
+    container_name: tms-consensus
+    environment:
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=temperature_monitoring;Username=tms_user;Password=tms_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ingestion-service:
+        condition: service_started
+
+  ingress:
+    image: nginx:1.27-alpine
+    container_name: tms-ingress
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - ingestion-service
+      - notification-service
 
 volumes:
   tms_pgdata:
